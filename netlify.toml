@@ -1,0 +1,33 @@
+# Netlify configuration — Hamdi Van Buuren (Next.js App Router)
+# The official Next.js runtime handles the build output, SSR/ISR routing,
+# next/image optimization and the .next publish directory automatically.
+
+[build]
+  # On Netlify CI the Netlify DB extension injects NETLIFY_DATABASE_URL, so the
+  # schema is synced and the admin seeded as part of the build. The guard makes
+  # the same command a no-op DB-wise on local builds (where the URL is absent).
+  command = "prisma generate && if [ -n \"$NETLIFY_DATABASE_URL\" ]; then DATABASE_URL=\"$NETLIFY_DATABASE_URL\" prisma db push --skip-generate --accept-data-loss && DATABASE_URL=\"$NETLIFY_DATABASE_URL\" npm run vault:seed:prod; fi && next build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  # Match the local toolchain; keeps the remote build reproducible.
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# ---------------------------------------------------------------------------
+# Caching — Next.js fingerprints these assets, so they are safe to cache hard.
+# Security headers are set in next.config.ts so they reach every route,
+# including server-rendered HTML. HTML/data routes keep the runtime defaults.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

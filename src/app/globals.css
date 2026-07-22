@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+@theme {
+  /* Palette — warm noir cinema + ivory gallery */
+  --color-noir: #0f0d0b;
+  --color-noir-soft: #17141180;
+  --color-noir-raised: #1a1714;
+  --color-ivory: #f3eee6;
+  --color-ivory-deep: #eae3d6;
+  --color-bone: #e9e2d6;
+  --color-smoke: #a39a8c;
+  --color-smoke-dark: #6f695f;
+  --color-champagne: #c3a878;
+  --color-line-dark: #ffffff1f;
+  --color-line-light: #0f0d0b1f;
+
+  --font-serif: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-instrument), "Instrument Sans", system-ui, sans-serif;
+
+  --ease-cinema: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --tracking-label: 0.22em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-noir);
+  color: var(--color-ivory);
+  font-family: var(--font-sans);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-champagne);
+  color: var(--color-noir);
+}
+
+:focus-visible {
+  outline: 1px solid var(--color-champagne);
+  outline-offset: 4px;
+}
+
+/* Editorial micro-label */
+.label {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* Display serif defaults */
+.display {
+  font-family: var(--font-serif);
+  font-weight: 300;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+/* Hairline rules */
+.rule-dark {
+  border-color: var(--color-line-dark);
+}
+.rule-light {
+  border-color: var(--color-line-light);
+}
+
+/* Underline link — draws in from left */
+.link-draw {
+  position: relative;
+}
+.link-draw::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.5s var(--ease-cinema);
+}
+.link-draw:hover::after,
+.link-draw:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Image hover — slow museum zoom */
+.frame {
+  overflow: hidden;
+}
+.frame img {
+  transition: transform 1.4s var(--ease-cinema);
+}
+@media (hover: hover) {
+  .frame:hover img {
+    transform: scale(1.04);
+  }
+}
+
+/* Horizontal film strip */
+.filmstrip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.filmstrip::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .frame img {
+    transition: none;
+  }
+}
+
+/* ── Vault (admin) — luxury glass on true black ─────────────────────── */
+.vault {
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(195, 168, 120, 0.07), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(255, 255, 255, 0.04), transparent 55%),
+    #09090b;
+  color: #e6e4df;
+  min-height: 100svh;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.glass-strong {
+  background: rgba(20, 19, 17, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.vault-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.8rem 1rem;
+  font-size: 0.9rem;
+  color: #f3eee6;
+  transition:
+    border-color 0.4s var(--ease-cinema),
+    background 0.4s var(--ease-cinema);
+}
+.vault-input::placeholder {
+  color: #6f695f;
+}
+.vault-input:focus {
+  outline: none;
+  border-color: rgba(195, 168, 120, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.vault-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+

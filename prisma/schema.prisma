@@ -1,0 +1,187 @@
+// HVB admin — data model (PostgreSQL / Netlify Neon).
+// The schema deliberately avoids provider-specific types (enums, Json) so it
+// stays portable. Role/status/type fields are strings validated by Zod at the
+// edges. DATABASE_URL is set from NETLIFY_DATABASE_URL at build/runtime.
+
+generator client {
+  provider = "prisma-client-js"
+  // "native" for local (macOS); the rhel target is the Netlify/AWS Lambda
+  // runtime — both engines are bundled so a local build deploys correctly.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  role              String    @default("admin")
+  // AES-256-GCM ciphertext; set during 2FA setup, active once totpEnabled
+  totpSecretEnc     String?
+  totpEnabled       Boolean   @default(false)
+  failedCount       Int       @default(0)
+  lockedUntil       DateTime?
+  passwordChangedAt DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  sessions       Session[]
+  recoveryCodes  RecoveryCode[]
+  trustedDevices TrustedDevice[]
+  resetTokens    PasswordResetToken[]
+}
+
+model Session {
+  id                String    @id @default(cuid())
+  userId            String
+  user              AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime  @default(now())
+  lastActiveAt      DateTime  @default(now())
+  absoluteExpiresAt DateTime
+  revokedAt         DateTime?
+  ip                String?
+  browser           String?
+  os                String?
+  device            String?
+
+  tokens SessionToken[]
+
+  @@index([userId])
+}
+
+// Rotating refresh tokens. One live (usedAt = null) token per session; a
+// presented token that is already used means theft/replay — the whole
+// session is revoked.
+model SessionToken {
+  id        String    @id @default(cuid())
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([sessionId])
+}
+
+model RecoveryCode {
+  id       String    @id @default(cuid())
+  userId   String
+  user     AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash String    @unique
+  usedAt   DateTime?
+
+  @@index([userId])
+}
+
+model TrustedDevice {
+  id         String    @id @default(cuid())
+  userId     String
+  user       AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  label      String    @default("Unknown device")
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([userId])
+}
+
+// Security + activity trail. type: login_success | login_failure | lockout |
+// mfa_success | mfa_failure | logout | refresh_reuse | password_reset_requested |
+// password_reset | password_changed | twofa_enabled | twofa_disabled |
+// session_revoked | recovery_code_used
+model AuditLog {
+  id        String   @id @default(cuid())
+  type      String
+  email     String?
+  userId    String?
+  ip        String?
+  country   String?
+  browser   String?
+  os        String?
+  device    String?
+  userAgent String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([email, createdAt])
+  @@index([createdAt])
+}
+
+// Booking / contact submissions from the public site.
+// status: new | replied | archived
+model Inquiry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  shootType String
+  date      String?
+  location  String?
+  budget    String?
+  message   String
+  status    String   @default("new")
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  fileName  String   @unique
+  thumbName String
+  width     Int
+  height    Int
+  bytes     Int
+  alt       String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  author    String
+  role      String?
+  quote     String
+  published Boolean  @default(false)
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+// Privacy-first page views: no raw IP or fingerprint stored — visitorHash is
+// sha256(dailySalt + ip + ua) and unlinkable across days.
+model PageView {
+  id          String   @id @default(cuid())
+  day         String
+  path        String
+  visitorHash String
+  country     String?
+  device      String?
+  createdAt   DateTime @default(now())
+
+  @@index([day])
+  @@index([path, day])
+}

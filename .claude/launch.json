@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "afli",
+      "runtimeExecutable": "/Users/sicherif/.local/node/bin/npm",
+      "runtimeArgs": ["--prefix", "/Users/sicherif/Claude code/mohamed-afli", "run", "dev"],
+      "port": 5280,
+      "env": {
+        "PATH": "/Users/sicherif/.local/node/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    },
+    {
+      "name": "hvb",
+      "runtimeExecutable": "/Users/sicherif/.local/node/bin/npx",
+      "runtimeArgs": ["next", "dev", "-p", "3100"],
+      "port": 3100,
+      "env": {
+        "PATH": "/Users/sicherif/.local/node/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    },
+    {
+      "name": "mindfreak",
+      "runtimeExecutable": "/Users/sicherif/.local/node/bin/npx",
+      "runtimeArgs": ["--prefix", "/Users/sicherif/Downloads/nadhir mindfreak portfolio/site", "vite", "/Users/sicherif/Downloads/nadhir mindfreak portfolio/site", "--port", "5273", "--strictPort"],
+      "port": 5273,
+      "env": {
+        "PATH": "/Users/sicherif/.local/node/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    }
+  ]
+}

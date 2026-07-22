@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>HVB — form registration</title>
+  </head>
+  <body>
+    <!--
+      Netlify Forms detection file. The Next.js runtime (v5) no longer scans
+      prerendered pages for form markup, so each Netlify Form is declared here
+      once at build time. The live React form in /booking submits to this path
+      via fetch. Keep the field names in sync with BookingForm.tsx.
+    -->
+    <form name="booking" data-netlify="true" hidden>
+      <input type="hidden" name="form-name" value="booking" />
+      <input type="text" name="name" />
+      <input type="email" name="email" />
+      <input type="tel" name="phone" />
+      <input type="text" name="shootType" />
+      <input type="text" name="date" />
+      <input type="text" name="location" />
+      <input type="text" name="budget" />
+      <textarea name="message"></textarea>
+    </form>
+  </body>
+</html>
