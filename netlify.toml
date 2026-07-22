@@ -3,10 +3,12 @@
 # next/image optimization and the .next publish directory automatically.
 
 [build]
-  # On Netlify CI the Netlify DB extension injects NETLIFY_DATABASE_URL, so the
-  # schema is synced and the admin seeded as part of the build. The guard makes
-  # the same command a no-op DB-wise on local builds (where the URL is absent).
-  command = "prisma generate && if [ -n \"$NETLIFY_DATABASE_URL\" ]; then DATABASE_URL=\"$NETLIFY_DATABASE_URL\" prisma db push --skip-generate --accept-data-loss && DATABASE_URL=\"$NETLIFY_DATABASE_URL\" npm run vault:seed:prod; fi && next build"
+  # Schema + admin are created once at runtime via the secret-protected
+  # /api/admin/bootstrap endpoint, which connects with the pooled Neon URL that
+  # the Netlify DB extension injects into CI-built functions. (Prisma's own
+  # schema push needs a direct connection, so it is intentionally not in the
+  # build.)
+  command = "prisma generate && next build"
   publish = ".next"
 
 [[plugins]]
