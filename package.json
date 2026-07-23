@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.9",
-    "@netlify/database": "^1.1.0",
     "@prisma/client": "^6.19.3",
     "framer-motion": "^11.18.2",
     "hash-wasm": "^4.12.0",
