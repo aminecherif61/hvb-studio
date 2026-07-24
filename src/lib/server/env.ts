@@ -27,8 +27,12 @@ if (!parsed.success) {
   );
 }
 
+// The database URL is intentionally NOT required at import time: `next build`
+// evaluates route modules to collect page data, and a missing URL there must
+// not crash the build. A truly missing URL surfaces as a clean query-time
+// error (caught by apiHandler) instead.
 if (!parsed.data.DATABASE_URL && !parsed.data.NETLIFY_DATABASE_URL) {
-  throw new Error("Invalid environment: set DATABASE_URL or NETLIFY_DATABASE_URL");
+  console.warn("[env] No DATABASE_URL / NETLIFY_DATABASE_URL set — DB calls will fail until one is provided.");
 }
 
 export const env = parsed.data;
