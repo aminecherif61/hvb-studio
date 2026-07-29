@@ -34,6 +34,32 @@ are printed to the server console.
   active sessions, trusted devices
 - **Blog** — future-ready placeholder
 
+## Admin sign-in (how it works)
+
+The console has a single owner, so there is no users table. Credentials come
+from environment variables and sessions are stateless:
+
+- `ADMIN_EMAIL` + `ADMIN_PASSWORD_HASH_B64` (Argon2id hash, base64-encoded —
+  see `.env.example` for the one-liner that generates it).
+- Access + refresh tokens are signed JWTs in HttpOnly / Secure /
+  SameSite=Strict cookies, rotated on refresh, with a 12-hour absolute cap.
+- Brute force: 5 failures per email/IP → 15-minute lock (in-memory).
+
+**To change the password**, regenerate the hash and update
+`ADMIN_PASSWORD_HASH_B64` in your host's environment settings. Rotating
+`AUTH_SECRET` immediately invalidates every existing session.
+
+Two-factor authentication, trusted devices and emailed password resets need a
+persistent store — attach a database (below) to enable them.
+
+## Optional database
+
+Inquiries, uploads, testimonials and analytics persist to Postgres when
+`DATABASE_URL` is set; without it those pages render empty states and
+inquiries are written to the server log instead. To enable: set
+`DATABASE_URL`, then create the schema once via `npx prisma db push` (or
+`POST /api/admin/bootstrap` with the `x-bootstrap-secret` header).
+
 ## Production deployment
 
 1. **Database** — provision PostgreSQL (Neon / Supabase / RDS). In
