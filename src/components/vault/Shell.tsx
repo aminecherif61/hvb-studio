@@ -11,12 +11,7 @@ import { VEASE } from "./ui";
 const NAV = [
   { href: "/admin/overview", label: "Overview" },
   { href: "/admin/inquiries", label: "Inquiries" },
-  { href: "/admin/portfolio", label: "Portfolio" },
-  { href: "/admin/testimonials", label: "Testimonials" },
-  { href: "/admin/seo", label: "SEO" },
-  { href: "/admin/activity", label: "Activity" },
   { href: "/admin/settings", label: "Security" },
-  { href: "/admin/blog", label: "Blog" },
 ];
 
 const REFRESH_EVERY_MS = 8 * 60_000; // access token lives 10 min

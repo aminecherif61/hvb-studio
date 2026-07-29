@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { db } from "@/lib/server/db";
+import { listInquiries } from "@/lib/server/inquiry-store";
 import { safe } from "@/lib/server/safe-db";
 import { Badge, Card, PageTitle, Sparkline, StatCard, Empty } from "@/components/vault/ui";
 
-type InquiryRow = { id: string; name: string; shootType: string; status: string; createdAt: Date };
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type AuditRow = { id: string; type: string; ip: string | null; browser: string | null; os: string | null; createdAt: Date };
 
 export const metadata = { title: "Overview" };
@@ -18,9 +21,17 @@ export default async function OverviewPage() {
   const since7 = dayKey(6);
   const since30 = dayKey(29);
 
-  // Every read is fallback-guarded so the dashboard renders with or without
-  // a database attached.
-  const [viewsToday, views7, views30, uniques7, topPaths, byDay, inquiriesNew, inquiries30, recentInquiries, recentLogins] =
+  // Inquiries are fetched once and the counts derived — each listing reads
+  // every stored record, so repeating it would triple the work.
+  const allInquiries = await listInquiries(200);
+  const cutoff30 = Date.now() - 30 * 86_400_000;
+  const inquiriesNew = allInquiries.filter((i) => i.status === "new").length;
+  const inquiries30 = allInquiries.filter((i) => new Date(i.createdAt).getTime() >= cutoff30).length;
+  const recentInquiries = allInquiries.slice(0, 5);
+
+  // Every database read is fallback-guarded so the dashboard renders with or
+  // without a database attached.
+  const [viewsToday, views7, views30, uniques7, topPaths, byDay, recentLogins] =
     await Promise.all([
       safe(() => db.pageView.count({ where: { day: today } }), 0),
       safe(() => db.pageView.count({ where: { day: { gte: since7 } } }), 0),
@@ -47,9 +58,6 @@ export default async function OverviewPage() {
         () => db.pageView.groupBy({ by: ["day"], where: { day: { gte: dayKey(13) } }, _count: { day: true } }),
         [] as { day: string; _count: { day: number } }[],
       ),
-      safe(() => db.inquiry.count({ where: { status: "new" } }), 0),
-      safe(() => db.inquiry.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }), 0),
-      safe(() => db.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: 5 }), [] as InquiryRow[]),
       safe(
         () =>
           db.auditLog.findMany({
@@ -117,7 +125,9 @@ export default async function OverviewPage() {
                     <p className="truncate text-sm text-ivory/90">
                       {inq.name} <span className="text-smoke-dark">· {inq.shootType}</span>
                     </p>
-                    <p className="mt-0.5 text-xs text-smoke-dark">{inq.createdAt.toLocaleDateString("en-GB")}</p>
+                    <p className="mt-0.5 text-xs text-smoke-dark">
+                      {new Date(inq.createdAt).toLocaleDateString("en-GB")}
+                    </p>
                   </div>
                   <Badge tone={inq.status === "new" ? "gold" : "gray"}>{inq.status}</Badge>
                 </li>
@@ -128,9 +138,6 @@ export default async function OverviewPage() {
         <Card delay={0.25}>
           <div className="flex items-baseline justify-between">
             <p className="label text-smoke">Recent sign-in activity</p>
-            <Link href="/admin/activity" className="link-draw label text-smoke-dark hover:text-ivory">
-              Full log
-            </Link>
           </div>
           <ul className="mt-5 divide-y divide-white/[0.06]">
             {recentLogins.map((log) => (

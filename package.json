@@ -14,6 +14,7 @@
   "dependencies": {
     "@netlify/blobs": "^10.7.9",
     "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.6.1",
     "framer-motion": "^11.18.2",
     "hash-wasm": "^4.12.0",
     "jose": "^6.2.4",
