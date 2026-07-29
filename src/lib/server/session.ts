@@ -1,139 +1,150 @@
-import type { AdminUser, Session } from "@prisma/client";
+import { adminIdentity, ADMIN_ID, type AdminIdentity } from "./admin-account";
 import { COOKIE, clearAuthCookies, getCookie, setCookie } from "./cookies";
-import { randomToken, sha256 } from "./crypto";
-import { db } from "./db";
+import { randomToken } from "./crypto";
 import type { RequestContext } from "./request-context";
 import {
   ACCESS_TTL_S,
   REFRESH_TTL_S,
   SESSION_ABSOLUTE_S,
   signAccessToken,
+  signRefreshToken,
   verifyToken,
   type AccessClaims,
+  type RefreshClaims,
 } from "./tokens";
 
-/** Create a session and issue access + refresh cookies. */
-export async function createSession(user: AdminUser, ctx: RequestContext): Promise<Session> {
-  const refreshToken = randomToken();
-  const session = await db.session.create({
-    data: {
-      userId: user.id,
-      absoluteExpiresAt: new Date(Date.now() + SESSION_ABSOLUTE_S * 1000),
-      ip: ctx.ip,
-      browser: ctx.browser,
-      os: ctx.os,
-      device: ctx.device,
-      tokens: {
-        create: { tokenHash: sha256(refreshToken), expiresAt: new Date(Date.now() + REFRESH_TTL_S * 1000) },
-      },
-    },
-  });
-  await setCookie(COOKIE.access, await signAccessToken({ sub: user.id, sid: session.id, role: user.role }), ACCESS_TTL_S);
-  await setCookie(COOKIE.refresh, refreshToken, REFRESH_TTL_S);
-  return session;
+/**
+ * Stateless sessions.
+ *
+ * Both the access and refresh tokens are signed JWTs held in HttpOnly,
+ * Secure, SameSite=Strict cookies — no session table, so sign-in works with
+ * no database attached. Security properties that remain: short-lived access
+ * tokens (10 min), refresh rotation on every use, an absolute session cap
+ * (12 h) carried inside the token, and signature+expiry verification on every
+ * request. Trade-off: server-side revocation of a single session is not
+ * possible without shared state; rotating AUTH_SECRET invalidates everything
+ * immediately, and the idle/absolute windows bound exposure.
+ */
+
+export interface SessionInfo {
+  id: string;
+  createdAt: Date;
+  lastActiveAt: Date;
+  absoluteExpiresAt: Date;
+  ip: string | null;
+  browser: string | null;
+  os: string | null;
+  device: string | null;
+}
+
+export interface AuthedAdmin {
+  user: AdminIdentity & { totpEnabled: boolean };
+  session: SessionInfo;
+}
+
+function sessionFromClaims(claims: AccessClaims): SessionInfo {
+  return {
+    id: claims.sid,
+    createdAt: new Date(claims.iat0 ?? Date.now()),
+    lastActiveAt: new Date(),
+    absoluteExpiresAt: new Date((claims.abs ?? Math.floor(Date.now() / 1000) + SESSION_ABSOLUTE_S) * 1000),
+    ip: claims.ip ?? null,
+    browser: claims.br ?? null,
+    os: claims.os ?? null,
+    device: claims.dv ?? null,
+  };
+}
+
+/** Issue access + refresh cookies for a fresh sign-in. */
+export async function createSession(_user: unknown, ctx: RequestContext): Promise<SessionInfo> {
+  const sid = randomToken(12);
+  const nowS = Math.floor(Date.now() / 1000);
+  const abs = nowS + SESSION_ABSOLUTE_S;
+  const base = {
+    sub: ADMIN_ID,
+    sid,
+    role: "admin" as const,
+    abs,
+    iat0: Date.now(),
+    ip: ctx.ip,
+    br: ctx.browser,
+    os: ctx.os,
+    dv: ctx.device,
+  };
+
+  await setCookie(COOKIE.access, await signAccessToken(base), ACCESS_TTL_S);
+  await setCookie(COOKIE.refresh, await signRefreshToken({ ...base, purpose: "refresh" }), REFRESH_TTL_S);
+
+  return sessionFromClaims(base as AccessClaims);
 }
 
 /**
- * Rotate the refresh token. A token that was already used is treated as
- * stolen: the entire session is revoked (classic rotation-family defense).
- * Returns the fresh access claims or null when re-authentication is needed.
+ * Rotate the refresh token and mint a new access token. Returns null when the
+ * refresh token is missing, invalid, expired, or past the absolute cap — in
+ * which case the caller must re-authenticate.
  */
 export async function rotateSession(): Promise<AccessClaims | null> {
   const presented = await getCookie(COOKIE.refresh);
   if (!presented) return null;
 
-  const record = await db.sessionToken.findUnique({
-    where: { tokenHash: sha256(presented) },
-    include: { session: { include: { user: true } } },
-  });
-  if (!record) return null;
+  const claims = await verifyToken<RefreshClaims>(presented);
+  if (!claims || claims.purpose !== "refresh" || claims.role !== "admin") return null;
 
-  const { session } = record;
-  const now = Date.now();
+  const nowS = Math.floor(Date.now() / 1000);
+  if (claims.abs && claims.abs < nowS) return null; // absolute session cap reached
 
-  if (record.usedAt) {
-    // Within a short grace window a re-presented token is a benign race
-    // (parallel tabs refreshing together): issue a fresh access token and
-    // leave the winner's rotation untouched. Outside it, this is replay of
-    // a stolen token — kill the whole session.
-    const GRACE_MS = 10_000;
-    if (!session.revokedAt && now - record.usedAt.getTime() < GRACE_MS) {
-      const claims: AccessClaims = { sub: session.userId, sid: session.id, role: session.user.role };
-      await setCookie(COOKIE.access, await signAccessToken(claims), ACCESS_TTL_S);
-      return claims;
-    }
-    await db.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
-    return null;
-  }
-  if (
-    session.revokedAt ||
-    record.expiresAt.getTime() < now ||
-    session.absoluteExpiresAt.getTime() < now ||
-    session.lastActiveAt.getTime() + REFRESH_TTL_S * 1000 < now
-  ) {
-    return null;
-  }
+  const next: AccessClaims = {
+    sub: claims.sub,
+    sid: claims.sid,
+    role: "admin",
+    abs: claims.abs,
+    iat0: claims.iat0,
+    ip: claims.ip,
+    br: claims.br,
+    os: claims.os,
+    dv: claims.dv,
+  };
 
-  const nextToken = randomToken();
-  await db.$transaction([
-    db.sessionToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-    db.sessionToken.create({
-      data: { sessionId: session.id, tokenHash: sha256(nextToken), expiresAt: new Date(now + REFRESH_TTL_S * 1000) },
-    }),
-    db.session.update({ where: { id: session.id }, data: { lastActiveAt: new Date() } }),
-  ]);
-
-  const claims: AccessClaims = { sub: session.userId, sid: session.id, role: session.user.role };
-  await setCookie(COOKIE.access, await signAccessToken(claims), ACCESS_TTL_S);
-  await setCookie(COOKIE.refresh, nextToken, REFRESH_TTL_S);
-  return claims;
-}
-
-export interface AuthedAdmin {
-  user: AdminUser;
-  session: Session;
+  await setCookie(COOKIE.access, await signAccessToken(next), ACCESS_TTL_S);
+  await setCookie(COOKIE.refresh, await signRefreshToken({ ...next, purpose: "refresh" }), REFRESH_TTL_S);
+  return next;
 }
 
 /**
  * Full authentication check for server components and route handlers:
- * verifies the JWT, then confirms the session row is live (not revoked,
- * within idle + absolute windows). Backend is the source of truth — a valid
- * signature alone is never enough.
+ * verifies the signed access token and the absolute session cap.
  */
 export async function getAuthedAdmin(): Promise<AuthedAdmin | null> {
   const token = await getCookie(COOKIE.access);
   if (!token) return null;
+
   const claims = await verifyToken<AccessClaims>(token);
-  if (!claims || claims.role !== "admin") return null;
+  if (!claims || claims.role !== "admin" || claims.sub !== ADMIN_ID) return null;
 
-  const session = await db.session.findUnique({ where: { id: claims.sid }, include: { user: true } });
-  if (!session || session.revokedAt) return null;
+  const nowS = Math.floor(Date.now() / 1000);
+  if (claims.abs && claims.abs < nowS) return null;
 
-  const now = Date.now();
-  if (session.absoluteExpiresAt.getTime() < now) return null;
-  if (session.lastActiveAt.getTime() + REFRESH_TTL_S * 1000 < now) return null;
-  if (session.user.id !== claims.sub || session.user.role !== "admin") return null;
-
-  // Sliding activity window; throttled to one write per minute.
-  if (now - session.lastActiveAt.getTime() > 60_000) {
-    await db.session.update({ where: { id: session.id }, data: { lastActiveAt: new Date() } });
-  }
-  const { user, ...rest } = session;
-  return { user, session: rest as Session };
+  return {
+    user: { ...adminIdentity(), totpEnabled: false },
+    session: sessionFromClaims(claims),
+  };
 }
 
-export async function revokeSession(sessionId: string): Promise<void> {
-  await db.session.updateMany({ where: { id: sessionId }, data: { revokedAt: new Date() } });
-}
-
-export async function revokeAllSessions(userId: string): Promise<void> {
-  await db.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
-}
-
+/** Sign out: clearing the cookies ends the session for this browser. */
 export async function endCurrentSession(): Promise<string | null> {
   const token = await getCookie(COOKIE.access);
   const claims = token ? await verifyToken<AccessClaims>(token) : null;
-  if (claims) await revokeSession(claims.sid);
   await clearAuthCookies();
   return claims?.sub ?? null;
+}
+
+// Kept for API compatibility with callers; without shared state the only
+// meaningful revocation is clearing this browser's cookies (or rotating
+// AUTH_SECRET, which invalidates every issued token everywhere).
+export async function revokeSession(_sessionId: string): Promise<void> {
+  await clearAuthCookies();
+}
+
+export async function revokeAllSessions(_userId: string): Promise<void> {
+  await clearAuthCookies();
 }

@@ -14,6 +14,16 @@ export interface AccessClaims {
   sub: string; // user id
   sid: string; // session id
   role: string;
+  abs?: number; // absolute session expiry (unix seconds)
+  iat0?: number; // session start (ms) — for display only
+  ip?: string;
+  br?: string; // browser
+  os?: string;
+  dv?: string; // device
+}
+
+export interface RefreshClaims extends AccessClaims {
+  purpose: "refresh";
 }
 
 export interface PreAuthClaims {
@@ -32,6 +42,7 @@ async function sign(claims: Record<string, unknown>, ttlSeconds: number): Promis
 }
 
 export const signAccessToken = (c: AccessClaims) => sign({ ...c }, ACCESS_TTL_S);
+export const signRefreshToken = (c: RefreshClaims) => sign({ ...c }, REFRESH_TTL_S);
 export const signPreAuthToken = (c: PreAuthClaims) => sign({ ...c }, PREAUTH_TTL_S);
 
 export async function verifyToken<T>(token: string): Promise<T | null> {

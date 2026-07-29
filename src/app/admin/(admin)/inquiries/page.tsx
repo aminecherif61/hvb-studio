@@ -1,11 +1,17 @@
 import { db } from "@/lib/server/db";
+import { safe } from "@/lib/server/safe-db";
 import { PageTitle, Card, Empty } from "@/components/vault/ui";
 import InquiryList from "./InquiryList";
 
 export const metadata = { title: "Inquiries" };
 
+type Row = Awaited<ReturnType<typeof db.inquiry.findMany>>;
+
 export default async function InquiriesPage() {
-  const inquiries = await db.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+  const inquiries = await safe(
+    () => db.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
+    [] as unknown as Row,
+  );
 
   return (
     <>

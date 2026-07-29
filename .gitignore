@@ -18,3 +18,5 @@ prisma/dev.db-journal
 
 # Nested sibling project
 mohamed-afli
+.vercel
+.env*

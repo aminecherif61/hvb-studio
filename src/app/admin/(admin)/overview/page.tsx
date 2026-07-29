@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/server/db";
+import { safe } from "@/lib/server/safe-db";
 import { Badge, Card, PageTitle, Sparkline, StatCard, Empty } from "@/components/vault/ui";
+
+type InquiryRow = { id: string; name: string; shootType: string; status: string; createdAt: Date };
+type AuditRow = { id: string; type: string; ip: string | null; browser: string | null; os: string | null; createdAt: Date };
 
 export const metadata = { title: "Overview" };
 
@@ -14,30 +18,47 @@ export default async function OverviewPage() {
   const since7 = dayKey(6);
   const since30 = dayKey(29);
 
+  // Every read is fallback-guarded so the dashboard renders with or without
+  // a database attached.
   const [viewsToday, views7, views30, uniques7, topPaths, byDay, inquiriesNew, inquiries30, recentInquiries, recentLogins] =
     await Promise.all([
-      db.pageView.count({ where: { day: today } }),
-      db.pageView.count({ where: { day: { gte: since7 } } }),
-      db.pageView.count({ where: { day: { gte: since30 } } }),
-      db.pageView
-        .findMany({ where: { day: { gte: since7 } }, distinct: ["visitorHash"], select: { id: true } })
-        .then((r) => r.length),
-      db.pageView.groupBy({
-        by: ["path"],
-        where: { day: { gte: since30 } },
-        _count: { path: true },
-        orderBy: { _count: { path: "desc" } },
-        take: 6,
-      }),
-      db.pageView.groupBy({ by: ["day"], where: { day: { gte: dayKey(13) } }, _count: { day: true } }),
-      db.inquiry.count({ where: { status: "new" } }),
-      db.inquiry.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }),
-      db.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
-      db.auditLog.findMany({
-        where: { type: { in: ["login_success", "login_failure", "lockout"] } },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
+      safe(() => db.pageView.count({ where: { day: today } }), 0),
+      safe(() => db.pageView.count({ where: { day: { gte: since7 } } }), 0),
+      safe(() => db.pageView.count({ where: { day: { gte: since30 } } }), 0),
+      safe(
+        () =>
+          db.pageView
+            .findMany({ where: { day: { gte: since7 } }, distinct: ["visitorHash"], select: { id: true } })
+            .then((r) => r.length),
+        0,
+      ),
+      safe(
+        () =>
+          db.pageView.groupBy({
+            by: ["path"],
+            where: { day: { gte: since30 } },
+            _count: { path: true },
+            orderBy: { _count: { path: "desc" } },
+            take: 6,
+          }),
+        [] as { path: string; _count: { path: number } }[],
+      ),
+      safe(
+        () => db.pageView.groupBy({ by: ["day"], where: { day: { gte: dayKey(13) } }, _count: { day: true } }),
+        [] as { day: string; _count: { day: number } }[],
+      ),
+      safe(() => db.inquiry.count({ where: { status: "new" } }), 0),
+      safe(() => db.inquiry.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }), 0),
+      safe(() => db.inquiry.findMany({ orderBy: { createdAt: "desc" }, take: 5 }), [] as InquiryRow[]),
+      safe(
+        () =>
+          db.auditLog.findMany({
+            where: { type: { in: ["login_success", "login_failure", "lockout"] } },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          }),
+        [] as AuditRow[],
+      ),
     ]);
 
   const dayMap = new Map(byDay.map((d) => [d.day, d._count.day]));

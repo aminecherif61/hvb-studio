@@ -1,11 +1,15 @@
 import { db } from "@/lib/server/db";
+import { safe } from "@/lib/server/safe-db";
 import { Card, PageTitle } from "@/components/vault/ui";
 import SeoForm from "./SeoForm";
 
 export const metadata = { title: "SEO" };
 
 export default async function SeoPage() {
-  const rows = await db.setting.findMany({ where: { key: { in: ["siteTitle", "siteDescription", "ogImage"] } } });
+  const rows = await safe(
+    () => db.setting.findMany({ where: { key: { in: ["siteTitle", "siteDescription", "ogImage"] } } }),
+    [] as Awaited<ReturnType<typeof db.setting.findMany>>,
+  );
   const value = (key: string) => rows.find((r) => r.key === key)?.value ?? "";
 
   return (

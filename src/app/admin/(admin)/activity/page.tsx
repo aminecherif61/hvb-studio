@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { safe } from "@/lib/server/safe-db";
 import { Badge, Card, Empty, PageTitle } from "@/components/vault/ui";
 
 export const metadata = { title: "Activity" };
@@ -19,7 +20,10 @@ const TONE: Record<string, "green" | "red" | "gold" | "gray"> = {
 };
 
 export default async function ActivityPage() {
-  const logs = await db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+  const logs = await safe(
+    () => db.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
+    [] as Awaited<ReturnType<typeof db.auditLog.findMany>>,
+  );
 
   return (
     <>

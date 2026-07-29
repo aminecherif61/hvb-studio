@@ -1,4 +1,5 @@
 import { db } from "@/lib/server/db";
+import { safe } from "@/lib/server/safe-db";
 import { allPhotos } from "@/lib/photos";
 import { Card, PageTitle } from "@/components/vault/ui";
 import MediaManager from "./MediaManager";
@@ -6,7 +7,10 @@ import MediaManager from "./MediaManager";
 export const metadata = { title: "Portfolio" };
 
 export default async function PortfolioPage() {
-  const assets = await db.mediaAsset.findMany({ orderBy: { createdAt: "desc" } });
+  const assets = await safe(
+    () => db.mediaAsset.findMany({ orderBy: { createdAt: "desc" } }),
+    [] as Awaited<ReturnType<typeof db.mediaAsset.findMany>>,
+  );
 
   return (
     <>
